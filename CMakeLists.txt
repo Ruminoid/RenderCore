@@ -25,6 +25,7 @@ conan_cmake_run(REQUIRES
 if (WIN32)
     target_compile_definitions(ruminoid_rendercore PUBLIC "-D_WIN32_WINNT=0x0601" "-DNOMINMAX" "-DRUMINOID_RC_DLL")
     target_compile_options(ruminoid_rendercore PUBLIC "/utf-8")
+    target_link_options(ruminoid_rendercore_test PUBLIC "/PROFILE")
 endif()
 target_compile_definitions(ruminoid_rendercore PUBLIC "-DSPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_TRACE")
 target_link_libraries(ruminoid_rendercore
