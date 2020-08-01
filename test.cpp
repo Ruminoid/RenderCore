@@ -18,6 +18,7 @@ int main()
 
 	auto start = std::chrono::high_resolution_clock::now();
 	size_t total_siz = 0;
+	//ruminoid_rc_render_frame(rctxt, 1280, 720, 42000);
 	for (int i = 0; i < 120 * 60; i++)
 	{
 		ruminoid_rc_render_frame(rctxt, 1280, 720, i * 1000 / 60);

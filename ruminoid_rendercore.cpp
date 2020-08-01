@@ -35,7 +35,7 @@ private:
 	size_t _current_size = 0;
 	size_t _current_compress_capacity = 0;
 	size_t _current_capacity = 0;
-	std::unique_ptr<unsigned char[]> _frame_buf = nullptr;
+	std::unique_ptr<unsigned int[]> _frame_buf = nullptr;
 	std::unique_ptr<unsigned char[]> _compress_buf = nullptr;
 	int _stride = 0;
 
@@ -94,44 +94,7 @@ ruminoid_rc_render_context_t ruminoid_libass_context::create_render_context()
 	return new ruminoid_libass_render_context(this, ass_renderer_init(_library));
 }
 
-#define _r(c) ((c)>>24)
-#define _g(c) (((c)>>16)&0xFF)
-#define _b(c) (((c)>>8)&0xFF)
-#define _a(c) ((c)&0xFF)
-
-//#include <chrono>
-//std::chrono::high_resolution_clock::duration dur;
-void blend_naive(unsigned char *dst, int stride, int width, int height, ASS_Image* img)
-{
-	//auto start = std::chrono::high_resolution_clock::now();
-	for (; img; img = img->next) {
-		int dstStride = img->stride;
-		int dst_x = img->dst_x;
-		int dst_y = img->dst_y;
-		auto opacity = 0xFF - static_cast<unsigned char>(_a(img->color));
-		auto r = (unsigned char)_r(img->color);
-		auto g = (unsigned char)_g(img->color);
-		auto b = (unsigned char)_b(img->color);
-
-		for (int y = 0; y < img->h && y + img->dst_y < height; y++)
-		{
-			for (int x = 0; x < img->w && x + img->dst_x < width; x++)
-			{
-				int blank_current_pixel = (y + dst_y) * stride + (x + dst_x) * 4;
-				int ass_current_pixel = y * dstStride + x;
-				unsigned int a = unsigned(img->bitmap[ass_current_pixel]);
-				unsigned int k = a * opacity / 255;
-				unsigned int ck = 255 - k;
-
-				dst[blank_current_pixel] = (k * r + ck * dst[blank_current_pixel]) / 255;
-				dst[blank_current_pixel + 1] = (k * g + ck * dst[blank_current_pixel + 1]) / 255;
-				dst[blank_current_pixel + 2] = (k * b + ck * dst[blank_current_pixel + 2]) / 255;
-				dst[blank_current_pixel + 3] = (k + ck * dst[blank_current_pixel + 3] / 255);
-			}
-		}
-	}
-	//dur += std::chrono::high_resolution_clock::now() - start;
-}
+void blend_single(unsigned int* dst, int dst_stride, int w, int h, int color, unsigned char* src, int src_stride, int dst_x, int dst_y, int src_w, int src_h);
 
 ruminoid_libass_render_context::ruminoid_libass_render_context(ruminoid_libass_context *context, ASS_Renderer* renderer)
 	: _context(context), _renderer(renderer)
@@ -147,7 +110,72 @@ ruminoid_libass_render_context::~ruminoid_libass_render_context()
 
 void ruminoid_libass_render_context::blend(int width, int height, ASS_Image* image)
 {
-	blend_naive(_frame_buf.get(), _stride, width, height, image);
+	auto dst = _frame_buf.get();
+	while (image)
+	{
+		blend_single(
+			dst, _stride, width, height,
+			image->color,
+			image->bitmap, image->stride, image->dst_x, image->dst_y, image->w, image->h);
+
+		image = image->next;
+	}
+}
+
+#include <libpng16/png.h>
+
+typedef struct image_s {
+	int width, height, stride;
+	unsigned char* buffer;      // RGBA32
+} image_t;
+
+static void write_png(const char* fname, image_t* img)
+{
+	FILE* fp;
+	png_structp png_ptr;
+	png_infop info_ptr;
+	png_byte** row_pointers;
+	int k;
+
+	png_ptr =
+		png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
+	info_ptr = png_create_info_struct(png_ptr);
+	fp = NULL;
+
+	if (setjmp(png_jmpbuf(png_ptr))) {
+		png_destroy_write_struct(&png_ptr, &info_ptr);
+		fclose(fp);
+		return;
+	}
+
+	errno_t err = fopen_s(&fp, fname, "wb");
+	if (fp == NULL) {
+		printf("PNG Error opening %s for writing!\n", fname);
+		return;
+	}
+
+	png_init_io(png_ptr, fp);
+	png_set_compression_level(png_ptr, 0);
+
+	png_set_IHDR(png_ptr, info_ptr, img->width, img->height,
+		8, PNG_COLOR_TYPE_RGB_ALPHA, PNG_INTERLACE_NONE,
+		PNG_COMPRESSION_TYPE_DEFAULT, PNG_FILTER_TYPE_DEFAULT);
+
+	png_write_info(png_ptr, info_ptr);
+
+	//png_set_bgr(png_ptr);
+
+	row_pointers = (png_byte**)malloc(img->height * sizeof(png_byte*));
+	for (k = 0; k < img->height; k++)
+		row_pointers[k] = img->buffer + img->stride * k;
+
+	png_write_image(png_ptr, row_pointers);
+	png_write_end(png_ptr, info_ptr);
+	png_destroy_write_struct(&png_ptr, &info_ptr);
+
+	free(row_pointers);
+
+	fclose(fp);
 }
 
 void ruminoid_libass_render_context::render(int width, int height, int timeMs)
@@ -164,6 +192,8 @@ void ruminoid_libass_render_context::render(int width, int height, int timeMs)
 		reinterpret_cast<char*>(_compress_buf.get()),
 		_current_size, _current_compress_capacity);
 	_out_image.compressed_size = compressed_size;
+
+	//write_png("test.png", new image_t{ width, height, _stride, reinterpret_cast<unsigned char*>(_frame_buf.get()) });
 }
 
 void ruminoid_libass_render_context::set_limits(int glyph_max, int bitmap_max)
@@ -171,16 +201,17 @@ void ruminoid_libass_render_context::set_limits(int glyph_max, int bitmap_max)
 	ass_set_cache_limits(_renderer, glyph_max, bitmap_max);
 }
 
+std::align_val_t buffer_align = static_cast<std::align_val_t>(32);
 void ruminoid_libass_render_context::prepare_buf(int width, int height)
 {
 	_stride = ((width * 32 + 31) & ~31) / 8;
 	_current_size = _stride * height;
-	_current_compress_capacity = _current_size * 3;
+	_current_compress_capacity = size_t(_current_size * 1.5);
 
 	if (!_frame_buf || _current_capacity < _current_size)
 	{
-		_frame_buf.reset(new unsigned char[_current_size]);
-		_compress_buf.reset(new unsigned char[_current_size]);
+		_frame_buf.reset(new unsigned int[_current_size >> 2]);
+		_compress_buf.reset(new unsigned char[_current_compress_capacity]);
 		_current_capacity = _current_size;
 	}
 
@@ -193,6 +224,7 @@ void ruminoid_libass_render_context::prepare_buf(int width, int height)
 }
 
 //#include <iostream>
+
 extern "C" {
 
 ruminoid_rc_context_t ruminoid_rc_new_context()
