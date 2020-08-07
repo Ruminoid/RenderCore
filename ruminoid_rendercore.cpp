@@ -108,6 +108,7 @@ ruminoid_libass_render_context::~ruminoid_libass_render_context()
 	ass_renderer_done(_renderer);
 }
 
+#include <iostream>
 void ruminoid_libass_render_context::blend(int width, int height, ASS_Image* image)
 {
 	auto dst = _frame_buf.get();
@@ -120,62 +121,6 @@ void ruminoid_libass_render_context::blend(int width, int height, ASS_Image* ima
 
 		image = image->next;
 	}
-}
-
-#include <libpng16/png.h>
-
-typedef struct image_s {
-	int width, height, stride;
-	unsigned char* buffer;      // RGBA32
-} image_t;
-
-static void write_png(const char* fname, image_t* img)
-{
-	FILE* fp;
-	png_structp png_ptr;
-	png_infop info_ptr;
-	png_byte** row_pointers;
-	int k;
-
-	png_ptr =
-		png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
-	info_ptr = png_create_info_struct(png_ptr);
-	fp = NULL;
-
-	if (setjmp(png_jmpbuf(png_ptr))) {
-		png_destroy_write_struct(&png_ptr, &info_ptr);
-		fclose(fp);
-		return;
-	}
-
-	errno_t err = fopen_s(&fp, fname, "wb");
-	if (fp == NULL) {
-		printf("PNG Error opening %s for writing!\n", fname);
-		return;
-	}
-
-	png_init_io(png_ptr, fp);
-	png_set_compression_level(png_ptr, 0);
-
-	png_set_IHDR(png_ptr, info_ptr, img->width, img->height,
-		8, PNG_COLOR_TYPE_RGB_ALPHA, PNG_INTERLACE_NONE,
-		PNG_COMPRESSION_TYPE_DEFAULT, PNG_FILTER_TYPE_DEFAULT);
-
-	png_write_info(png_ptr, info_ptr);
-
-	//png_set_bgr(png_ptr);
-
-	row_pointers = (png_byte**)malloc(img->height * sizeof(png_byte*));
-	for (k = 0; k < img->height; k++)
-		row_pointers[k] = img->buffer + img->stride * k;
-
-	png_write_image(png_ptr, row_pointers);
-	png_write_end(png_ptr, info_ptr);
-	png_destroy_write_struct(&png_ptr, &info_ptr);
-
-	free(row_pointers);
-
-	fclose(fp);
 }
 
 void ruminoid_libass_render_context::render(int width, int height, int timeMs)
@@ -192,8 +137,6 @@ void ruminoid_libass_render_context::render(int width, int height, int timeMs)
 		reinterpret_cast<char*>(_compress_buf.get()),
 		_current_size, _current_compress_capacity);
 	_out_image.compressed_size = compressed_size;
-
-	//write_png("test.png", new image_t{ width, height, _stride, reinterpret_cast<unsigned char*>(_frame_buf.get()) });
 }
 
 void ruminoid_libass_render_context::set_limits(int glyph_max, int bitmap_max)

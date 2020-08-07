@@ -22,7 +22,6 @@ void blend_single(unsigned int* dst, int dst_stride, int w, int h, int color, un
 	unsigned int* dstp = reinterpret_cast<unsigned*>(dst) + size_t(dst_y) * (dst_stride >> 2) + dst_x;
 	unsigned char* srcp = reinterpret_cast<unsigned char*>(src);
 
-	//#dst_stride -= src_w * 4;
 	int src_stride2 = src_stride - src_w;
 	int dst_stride2 = (dst_stride >> 2) - src_w;
 
@@ -30,16 +29,15 @@ void blend_single(unsigned int* dst, int dst_stride, int w, int h, int color, un
 	{
 		for (int x = 0; x < src_w; x++, dstp++, srcp++)
 		{
-			unsigned int k = unsigned(*srcp) * opacity / 255;
+			unsigned int k = unsigned(*srcp) * opacity / 0xFF;
 			unsigned int ck = 255 - k;
 			unsigned int di = *dstp;
 
-			unsigned char finr = (k * r    + ck * _re(di)) / 255;
-			unsigned char fing = (k * g    + ck * _ge(di)) / 255;
-			unsigned char finb = (k * b    + ck * _be(di)) / 255;
-			unsigned char fina = (k * 0xFF + ck * _ae(di)) / 255;
+			unsigned char finr = (k * r    + ck * _re(di)) / 0xFF;
+			unsigned char fing = (k * g    + ck * _ge(di)) / 0xFF;
+			unsigned char finb = (k * b    + ck * _be(di)) / 0xFF;
+			unsigned char fina = 0xFF - ck * (0xFF - _ae(di)) / 0xFF;
 			*dstp = (((fina & 0xFF) << 24) + ((finb & 0xFF) << 16) + ((fing & 0xFF) << 8) + (finr & 0xFF));
-			// = dst[blank_current_pixel + 3] = (k * 255 + ck * dst[blank_current_pixel + 3]) / 255;
 		}
 	}
 }
