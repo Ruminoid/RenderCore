@@ -24,12 +24,13 @@ Please notice that this package requires `NuGet 3.3` or higher (in other words, 
 
 ## Build
 
-Simply run the following scripts in the `Developer Command Prompt for Visual Studio` and you'll get a fresh dll file.
+Simply run the following scripts in the `x64 Native Tools Developer Command Prompt for Visual Studio` and you'll get a fresh dll file.
 
 ```sh
 pip install conan
 conan remote add charliejiang https://api.bintray.com/conan/charliejiang/conan
 cmake .
+cmake --build .
 ```
 
 ## LICENSE
