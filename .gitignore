@@ -17,3 +17,14 @@ cmake_install.cmake
 install_manifest.txt
 compile_commands.json
 CTestTestfile.cmake
+
+# Visual Studio Project
+*.vcxproj
+*.filters
+*.sln
+
+graph_info.json
+
+# Conan Files
+conan*
+!conan.cmake
