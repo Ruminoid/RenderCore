@@ -33,6 +33,15 @@ cmake .
 cmake --build .
 ```
 
+Build for release:
+
+```sh
+pip install conan
+conan remote add charliejiang https://api.bintray.com/conan/charliejiang/conan
+cmake -DCMAKE_BUILD_TYPE=Release .
+msbuild ruminoid_rendercore.vcxproj /p:Configuration=Release
+```
+
 ## LICENSE
 
 MIT
